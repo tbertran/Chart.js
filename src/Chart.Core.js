@@ -176,6 +176,9 @@
 			// String - Scale header label font colour
 			yScaleLabelFontColor: "#666",
 
+            // Boolean - Scale header label font colour
+			increaseScaleForHighVariations: false,
+
 			// Function - Will fire on animation progression.
 			onAnimationProgress: function(){},
 
@@ -382,7 +385,7 @@
 		calculateOrderOfMagnitude = helpers.calculateOrderOfMagnitude = function(val){
 			return Math.floor(Math.log(val) / Math.LN10);
 		},
-		calculateScaleRange = helpers.calculateScaleRange = function(valuesArray, drawingSize, textSize, startFromZero, integersOnly){
+		calculateScaleRange = helpers.calculateScaleRange = function(valuesArray, drawingSize, textSize, startFromZero, integersOnly, increaseScaleForHighVariations){
 
 			//Set a minimum step of two - a point at the top of the graph, and a point at the base
 			var minSteps = 2,
@@ -407,12 +410,28 @@
 			}
 
 			var	valueRange = Math.abs(maxValue - minValue),
-				rangeOrderOfMagnitude = calculateOrderOfMagnitude(valueRange),
-				graphMax = Math.ceil(maxValue / (1 * Math.pow(10, rangeOrderOfMagnitude))) * Math.pow(10, rangeOrderOfMagnitude),
+				rangeOrderOfMagnitude = calculateOrderOfMagnitude(valueRange);
+			if (max(valuesArray) == min(valuesArray)) // This is to ensure no-range charts still get a 10-based scale
+			    rangeOrderOfMagnitude++;
+
+			var	graphMax = Math.ceil(maxValue / (1 * Math.pow(10, rangeOrderOfMagnitude))) * Math.pow(10, rangeOrderOfMagnitude),
 				graphMin = (startFromZero) ? 0 : Math.floor(minValue / (1 * Math.pow(10, rangeOrderOfMagnitude))) * Math.pow(10, rangeOrderOfMagnitude),
 				graphRange = graphMax - graphMin,
 				stepValue = Math.pow(10, rangeOrderOfMagnitude),
+				numberOfSteps = Math.round(graphRange / stepValue),
+                variationPct = (valueRange * 100) / maxValue;
+
+            if ((maxValue / graphRange) < 0.75 || variationPct >= 50) {
+			    if ((maxValue / graphRange) < 0.75) rangeOrderOfMagnitude -= 1; // This is for the cases where too much unused space is left on the chart but not quite enough to trigger the adjustment below (2x)
+			    if (increaseScaleForHighVariations && variationPct >= 50) //This is to reduce variation on screen for actual small variations
+			        rangeOrderOfMagnitude += 1;
+
+                // Recalculate those values with the new order of magnitude
+			    graphMax = Math.ceil(maxValue / (1 * Math.pow(10, rangeOrderOfMagnitude))) * Math.pow(10, rangeOrderOfMagnitude);
+			    graphMin = (startFromZero) ? 0 : Math.floor(minValue / (1 * Math.pow(10, rangeOrderOfMagnitude))) * Math.pow(10, rangeOrderOfMagnitude);
+				graphRange = graphMax - graphMin;
 				numberOfSteps = Math.round(graphRange / stepValue);
+            }
 
 			//If we have more space on the graph we'll use it to give more definition to the data
 			while((numberOfSteps > maxSteps || (numberOfSteps * 2) < maxSteps) && !skipFitting) {
@@ -445,6 +464,11 @@
 					}
 
 				}
+			}
+
+            // This is to ensure the highest scale number is greater than the max value
+			if ((graphMin + (numberOfSteps * stepValue)) < maxValue) {
+			    numberOfSteps += 1;
 			}
 
 			if (skipFitting){

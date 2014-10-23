@@ -200,13 +200,15 @@
 				valuesCount : labels.length,
 				beginAtZero : this.options.scaleBeginAtZero,
 				integersOnly : this.options.scaleIntegersOnly,
+                increaseScaleForHighVariations: this.options.increaseScaleForHighVariations,
 				calculateYRange : function(currentHeight){
 					var updatedRanges = helpers.calculateScaleRange(
 						dataTotal(),
 						currentHeight,
 						this.fontSize,
 						this.beginAtZero,
-						this.integersOnly
+						this.integersOnly,
+                        this.increaseScaleForHighVariations
 					);
 					helpers.extend(this, updatedRanges);
 				},
