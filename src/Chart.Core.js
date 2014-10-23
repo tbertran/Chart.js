@@ -143,6 +143,15 @@
 			// Number - Pixel offset from point x to tooltip edge
 			tooltipXOffset: 10,
 
+            // string - Color of the shadow effect on the tooltip. Null if no shadow desired
+			tooltipShadowColor: null,
+
+            // Boolean - True to only display tooltips for data points in the area of cursor
+			tooltipCursorSensitive: false,
+
+            // number - The number of pixels within which to display tooltips for the approiate data point(s).
+            tooltipCursorHitPixels: 10,
+
 			// String - Template string for single tooltips
 			tooltipTemplate: "<%if (label){%><%=label%>: <%}%><%= value %>",
 
@@ -488,8 +497,10 @@
 					"');}return p.join('');"
 				);
 
-				// Provide some basic currying to the user
-				return data ? fn( data ) : fn;
+		        var tempData = { label: data.label, datasetLabel: data.datasetLabel, value: data.customLabel ? data.customLabel : parseInt(data.value).toLocaleString() };
+
+		        // Provide some basic currying to the user
+		        return data ? fn(tempData) : fn;
 			}
 			return tmpl(templateString,valuesObject);
 		},
@@ -910,14 +921,26 @@
 				this.activeElements = ChartElements;
 			}
 			this.draw();
-			if (ChartElements.length > 0){
+
+			if (ChartElements.length > 0) {
+                // Only show the datasets that have been selected (within mouse range)
+			    var datasetsToShow = [];
+			    helpers.each(this.datasets, function (ds) {
+			        helpers.each(ChartElements, function (el) {
+			            if (ds.label === el.datasetLabel) {
+			                datasetsToShow.push(ds);
+			                return false;
+			            }
+			        });
+			    });
+
 				// If we have multiple datasets, show a MultiTooltip for all of the data points at that index
-				if (this.datasets && this.datasets.length > 1) {
+				if (datasetsToShow && datasetsToShow.length > 0) {
 					var dataArray,
 						dataIndex;
 
-					for (var i = this.datasets.length - 1; i >= 0; i--) {
-						dataArray = this.datasets[i].points || this.datasets[i].bars || this.datasets[i].segments;
+					for (var i = datasetsToShow.length - 1; i >= 0; i--) {
+					    dataArray = datasetsToShow[i].points || datasetsToShow[i].bars || datasetsToShow.segments;
 						dataIndex = indexOf(dataArray, ChartElements[0]);
 						if (dataIndex !== -1){
 							break;
@@ -936,7 +959,7 @@
 								yMax,
 								xMin,
 								yMin;
-							helpers.each(this.datasets, function(dataset){
+							helpers.each(datasetsToShow, function (dataset) {
 								dataCollection = dataset.points || dataset.bars || dataset.segments;
 								if (dataCollection[dataIndex] && dataCollection[dataIndex].hasValue()){
 									Elements.push(dataCollection[dataIndex]);
@@ -980,6 +1003,7 @@
 						fontFamily: this.options.tooltipFontFamily,
 						fontStyle: this.options.tooltipFontStyle,
 						fontSize: this.options.tooltipFontSize,
+						shadowColor: this.options.tooltipShadowColor,
 						titleTextColor: this.options.tooltipTitleFontColor,
 						titleFontFamily: this.options.tooltipTitleFontFamily,
 						titleFontStyle: this.options.tooltipTitleFontStyle,
@@ -1006,6 +1030,7 @@
 							fontFamily: this.options.tooltipFontFamily,
 							fontStyle: this.options.tooltipFontStyle,
 							fontSize: this.options.tooltipFontSize,
+							shadowColor: this.options.tooltipShadowColor,
 							caretHeight: this.options.tooltipCaretSize,
 							cornerRadius: this.options.tooltipCornerRadius,
 							text: template(this.options.tooltipTemplate, Element),
@@ -1104,7 +1129,7 @@
 			};
 		},
 		hasValue: function(){
-			return isNumber(this.value);
+		    return isNumber(this.value) || this.customLabel;
 		}
 	});
 
@@ -1287,6 +1312,12 @@
 
 			ctx.fillStyle = this.fillColor;
 
+            if (this.shadowColor) {
+                ctx.save();
+                ctx.shadowColor = this.shadowColor;
+                ctx.shadowBlur = 4;
+            }
+
 			switch(this.yAlign)
 			{
 			case "above":
@@ -1310,6 +1341,8 @@
 				break;
 			}
 
+ 
+
 			switch(this.xAlign)
 			{
 			case "left":
@@ -1323,6 +1356,8 @@
 			drawRoundedRectangle(ctx,tooltipX,tooltipY,tooltipWidth,tooltipRectHeight,this.cornerRadius);
 
 			ctx.fill();
+            if (this.shadowColor)
+                ctx.restore();
 
 			ctx.fillStyle = this.textColor;
 			ctx.textAlign = "center";
@@ -1351,12 +1386,13 @@
 
 			var halfHeight = this.height/2;
 
+			var shadowBuffer = this.shadowColor ? 4 : 0;
 			//Check to ensure the height will fit on the canvas
 			//The three is to buffer form the very
-			if (this.y - halfHeight < 0 ){
-				this.y = halfHeight;
-			} else if (this.y + halfHeight > this.chart.height){
-				this.y = this.chart.height - halfHeight;
+			if (this.y - halfHeight - shadowBuffer < 0 ){
+				this.y = halfHeight + shadowBuffer;
+			} else if (this.y + halfHeight + shadowBuffer > this.chart.height){
+				this.y = this.chart.height - halfHeight - shadowBuffer;
 			}
 
 			//Decide whether to align left or right based on position on canvas
@@ -1366,6 +1402,13 @@
 				this.x += this.xOffset;
 			}
 
+            // For long labels on tooltips, ensures they're not cut off
+            if (this.x < 0) {
+                this.x = this.xOffset;
+            }
+            if (this.x + this.width > this.chart.width) {
+                this.x = this.chart.width - this.width - this.xOffset;
+            }
 
 		},
 		getLineHeight : function(index){
@@ -1384,8 +1427,19 @@
 			drawRoundedRectangle(this.ctx,this.x,this.y - this.height/2,this.width,this.height,this.cornerRadius);
 			var ctx = this.ctx;
 			ctx.fillStyle = this.fillColor;
+
+            if (this.shadowColor) {
+                ctx.save();
+                ctx.shadowColor = this.shadowColor;
+                ctx.shadowBlur = 4;
 			ctx.fill();
 			ctx.closePath();
+                ctx.restore();
+            }
+            else {
+                ctx.fill();
+                ctx.closePath();
+            }
 
 			ctx.textAlign = "left";
 			ctx.textBaseline = "middle";
